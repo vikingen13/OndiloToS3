@@ -13,7 +13,9 @@ An Event bridge event is scheduled to trigger the Lambda function everyday.
 
 The data is partitioned with the following scheme: deviceId/year/month/day/
 
-By default, the Lambda function collect the previous day records but there is an option to retrieve the previous month records that can be triggered using AWS CLI. 
+By default, the Lambda function collect the previous day records but there is an option to retrieve the previous month records that can be triggered using AWS CLI.
+
+Two Cloudwatch alarms are set up and will send an email to the email specified during deployment if they are triggered. The first alarm is triggered if we reach 90% of the Kinesis Data Firehose capacity (not probable). The second alarm is based on a metric from the Lambda. When it is executed, the Lambda logs how many data points are processed. An alarm is triggered if the Lambda process less than 72 records which is useful to be informed if your ICO device is disconnected or if there is an issue in the data collection (the normal figure should be 6 records per hour * 24 hours = 144; less than 72 records means that we are missing 1 out of 2 records during the last 24 hours).
 
 IMPORTANT: By default, the project will create a S3 bucket to store your records but there is an option if you prefer to reuse your existing datalake.
 
@@ -61,12 +63,12 @@ At this point you can now synthesize the CloudFormation template for this code.
 
 If you want everything to be created, run the following command:
 ```
-$ cdk deploy
+$ cdk deploy --context email=youremail
 ```
 
 If you want to collect the Ondilo ICO data in an existing S3 bucket, run the following method:
 ```
-$ cdk deploy --context s3bucketname=S3_BUCKET_NAME
+$ cdk deploy --context s3bucketname=S3_BUCKET_NAME email=youremail
 ```
 
 Then run the initializeToken.py script and follow the instructions to collect your authentication token.

@@ -55,48 +55,78 @@ def lambda_handler(event, context):
 
     myRecords = []
 
-    #for each pool get all the values from the last 24h and store them    
-    for myPool in myPools:
-        print('process pool {} data'.format(myPool['id']))
+    cloudwatch = boto3.client('cloudwatch')
 
-        #temperature
-        myTemps = myClient.get_pool_histo(myPool['id'], 'temperature', myPeriod)
+    try:
 
-        myRecords+= myTemps
+        #for each pool get all the values from the last 24h and store them    
+        for myPool in myPools:
+            print('process pool {} data'.format(myPool['id']))
 
-        #ph
-        myPhs = myClient.get_pool_histo(myPool['id'], 'ph', myPeriod)
-        myRecords+= myPhs
+            #temperature
+            myTemps = myClient.get_pool_histo(myPool['id'], 'temperature', myPeriod)
 
-        #orp
-        myOrps = myClient.get_pool_histo(myPool['id'], 'orp', myPeriod)
-        myRecords+= myOrps
+            myRecords+= myTemps
 
-        #tds
-        myTds = myClient.get_pool_histo(myPool['id'], 'tds', myPeriod)
-        myRecords+= myTds
+            #ph
+            myPhs = myClient.get_pool_histo(myPool['id'], 'ph', myPeriod)
+            myRecords+= myPhs
 
-        #battery
-        myBatteries = myClient.get_pool_histo(myPool['id'], 'battery', myPeriod)
-        myRecords+= myBatteries
+            #orp
+            myOrps = myClient.get_pool_histo(myPool['id'], 'orp', myPeriod)
+            myRecords+= myOrps
 
-        #rssi
-        myRssis = myClient.get_pool_histo(myPool['id'], 'rssi', myPeriod)
-        myRecords+= myRssis        
-        
-        for record in myRecords:
-            record['id'] = myPool['id']
-            record['year'] = record['value_time'].split('T')[0].split('-')[0]
-            record['month'] = record['value_time'].split('T')[0].split('-')[1]
-            record['day'] = record['value_time'].split('T')[0].split('-')[2]
+            #tds
+            myTds = myClient.get_pool_histo(myPool['id'], 'tds', myPeriod)
+            myRecords+= myTds
+
+            #battery
+            myBatteries = myClient.get_pool_histo(myPool['id'], 'battery', myPeriod)
+            myRecords+= myBatteries
+
+            #rssi
+            myRssis = myClient.get_pool_histo(myPool['id'], 'rssi', myPeriod)
+            myRecords+= myRssis        
             
+            for record in myRecords:
+                record['id'] = myPool['id']
+                record['year'] = record['value_time'].split('T')[0].split('-')[0]
+                record['month'] = record['value_time'].split('T')[0].split('-')[1]
+                record['day'] = record['value_time'].split('T')[0].split('-')[2]
+                
 
-        #This trick is here to ensure we do not write more than 500 records in a single batch
-        MaxNumberOfRecords = 499
-        myRecordsLen = len(myRecords)
-        i=0
+            #This trick is here to ensure we do not write more than 500 records in a single batch
+            MaxNumberOfRecords = 499
+            myRecordsLen = len(myRecords)
+            i=0
 
-        while(i<myRecordsLen/MaxNumberOfRecords):
-            myResult = myFH.put_record_batch(DeliveryStreamName=myFHStreamName, Records=[{"Data":json.dumps(temp)} for temp in myRecords[i*MaxNumberOfRecords:i*MaxNumberOfRecords+MaxNumberOfRecords]])
-            print(myResult)
-            i+=1
+            while(i<myRecordsLen/MaxNumberOfRecords):
+                myResult = myFH.put_record_batch(DeliveryStreamName=myFHStreamName, Records=[{"Data":json.dumps(temp)} for temp in myRecords[i*MaxNumberOfRecords:i*MaxNumberOfRecords+MaxNumberOfRecords]])
+                print(myResult)
+                i+=1
+
+            #check the number of processed records and send it as a metric            
+            response = cloudwatch.put_metric_data(
+            MetricData = [
+                {
+                    'MetricName': 'Collected Records',
+                    'Unit': 'None',
+                    'Value': myRecordsLen
+                },
+            ],
+            Namespace = 'OndiloToS3'
+            )
+
+    except Exception as e:
+        #in case there is an issue, we log a zero record to trigger an alarm
+        response = cloudwatch.put_metric_data(
+            MetricData = [
+                {
+                    'MetricName': 'Collected Records',
+                    'Unit': 'None',
+                    'Value': myRecordsLen
+                },
+            ],
+            Namespace = 'OndiloToS3'
+        )
+        raise e
